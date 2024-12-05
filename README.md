@@ -16,7 +16,7 @@ Este proyecto detalla la implementación de un entorno **WordPress escalable** u
    - Servidores Web
    - Servidor NFS
    - Servidor MySQL
-6. Repositorio de GitHub
+6. Configuración BD y comprobación
 
 ---
 
@@ -42,6 +42,7 @@ El entorno incluye las siguientes máquinas, creadas manualmente desde la consol
 | **Web 2**          | Apache + WordPress     | Ubuntu 20.04         | t2.micro              | Servidores Web               |
 | **NFS**            | Compartir contenido    | Ubuntu 20.04         | t2.micro              | Servidor NFS                 |
 | **Base de Datos**  | MySQL                  | Ubuntu 20.04         | t2.micro              | Servidor de Base de Datos    |
+
 ---
 
 ## **Requisitos Previos**
@@ -75,6 +76,8 @@ Las instancias se crearon manualmente desde la consola de AWS:
 ---
 
 ### **2. Configuración de los Grupos de Seguridad**
+![image](https://github.com/user-attachments/assets/ca1f8515-5d1a-47e8-a1d2-0e205ced9524)
+
 
 Define reglas específicas para cada grupo de seguridad:
 
@@ -91,33 +94,114 @@ Define reglas específicas para cada grupo de seguridad:
 
 ## **Scripts de Aprovisionamiento**
 
-### **Balanceador de Carga**
-
-**`setup_loadbalancer.sh`**  
+### **Balanceador de Carga**  
 ```bash
-#!/bin/bash
-# Instalar HAProxy
-sudo apt update
-sudo apt install -y haproxy
+apt update -y
+apt install -y apache2
+a2enmod proxy
+a2enmod proxy_http
+a2enmod proxy_balancer
+a2enmod lbmethod_byrequests
+cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/load-balancer.conf
+sed -i '/DocumentRoot \/var\/www\/html/s/^/#/' /etc/apache2/sites-available/load-balancer.conf
+sed -i '/:warn/ a \<Proxy balancer://mycluster>\n    # Server 1\n    BalancerMember http://192.168.10.135\n    # Server 2\n    BalancerMember http://192.168.10.140\n</Proxy>\n#todas las peticiones las envÃa al siguiente balanceador\nProxyPass / balancer://mycluster/' /etc/apache2/sites-available/load-balancer.conf
+a2ensite load-balancer.conf
+a2dissite 000-default.conf
+systemctl restart apache2
+systemctl reload apache2
+```
+### **NFS**
+```bash
+apt update -y
+apt install nfs-kernel-server -y
+apt install unzip -y
+apt install curl -y
+apt install php php-mysql -y
+apt install mysql-client -y
 
-# Configuración de HAProxy
-sudo tee /etc/haproxy/haproxy.cfg > /dev/null <<EOL
-frontend http_front
-    bind *:80
-    default_backend web_servers
+mkdir /var/nfs/shared -p
+chown -R nobody:nogroup /var/nfs/shared
+sed -i '$a /var/nfs/shared    192.168.10.135(rw,sync,no_subtree_check)' /etc/exports
+sed -i '$a /var/nfs/shared    192.168.10.140(rw,sync,no_subtree_check)' /etc/exports
+curl -O https://wordpress.org/latest.zip
+unzip -o latest.zip -d /var/nfs/shared/
+chmod 755 -R /var/nfs/shared/
+chown -R www-data:www-data /var/nfs/shared/*
+systemctl restart nfs-kernel-server
+```
+### **WebServers**
+```bash
+apt update -y
+apt install apache2 -y
+apt install nfs-common -y
+apt install php libapache2-mod-php php-mysql php-curl php-gd php-xml php-mbstring php-xmlrpc php-zip php-soap php -y
+a2enmod rewrite
+#servidores web
+sudo sed -i 's|DocumentRoot .*|DocumentRoot /nfs/shared/wordpress|g' /etc/apache2/sites-available/000-default.conf
 
-backend web_servers
-    balance roundrobin
-    server web1 <IP_WEB1>:80 check
-    server web2 <IP_WEB2>:80 check
-EOL
-
-# Reiniciar servicio
-sudo systemctl restart haproxy
+sed -i '/<\/VirtualHost>/i \
+<Directory /nfs/shared/wordpress>\
+    Options Indexes FollowSymLinks\
+    AllowOverride All\
+    Require all granted\
+</Directory>' /etc/apache2/sites-available/000-default.conf
 
 
-Configuración de un directorio compartido para que los servidores web accedan a contenido estático.
-Servidor MySQL:
+cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/websv.conf
+# Montar la carpeta compartida desde el servidor NFS
 
-Instalación y configuración de MySQL.
-Creación de una base de datos y usuario para WordPress.
+mkdir -p /nfs/shared
+mount 192.168.10.134:/var/nfs/shared /nfs/shared
+a2dissite 000-default.conf
+a2ensite websv.conf
+echo "192.168.10.134:/var/nfs/general /nfs/general nfs auto,nofail,noatime,nolock,intr,tcp,actimeo=1800 0 0" | sudo tee -a /etc/fstab
+mount -a 
+systemctl restart apache2
+systemctl reload apache2
+systemctl status apache2
+```
+### **SGBD**
+```bash
+apt install mysql-server -y
+apt update -y
+apt install -y mysql-server
+sudo apt install -y phpmyadmin
+sed -i "s/^bind-address\s*=.*/bind-address = 192.168.10.153/" /etc/mysql/mysql.conf.d/mysqld.cnf
+sudo systemctl restart mysql
+
+ mysql <<EOF
+CREATE DATABASE db_wordpress;
+CREATE USER 'Carloscast'@'192.168.10.%' IDENTIFIED BY 'S1234?';
+GRANT ALL PRIVILEGES ON db_wordpress.* TO 'Carloscast'@'192.168.10.%';
+FLUSH PRIVILEGES;
+EOF
+```
+### Una vez ejecutados todos los SH, nos vamos a la página wordpress con nuestra IP pública, para empezar a realizar la configuración de la base de datos:
+
+# Creación de una base de datos y usuario para WordPress:
+![image](https://github.com/user-attachments/assets/cb2334dd-6312-4293-bf8c-33f3bc1a7d18)
+![image](https://github.com/user-attachments/assets/01ddd632-1a67-47e1-bebc-b0a4703ddf72)
+![image](https://github.com/user-attachments/assets/6d612d30-931d-4146-af19-8b43178c3ae3)
+
+# Una vez configurada la base de datos, podremos acceder a wordpress:
+![image](https://github.com/user-attachments/assets/bad2c05e-696c-4392-bed7-22bfe4c3f36b)
+
+## Realizarlo como sitio seguro:
+# Para ello, tendremos que registrar un dominio y asociarlo a la IP eláctica:
+![image](https://github.com/user-attachments/assets/4ecf5f78-f596-4512-905d-82e617ffe23a)
+
+# Después, nos dirigimos al balanceador, e instalamos Certbot:
+![image](https://github.com/user-attachments/assets/2168d2d8-d86e-4989-859e-cc103fd374b5)
+
+# Después, ejecutamos certbot:
+![image](https://github.com/user-attachments/assets/119cea55-e61e-4012-a8f4-750b980d77d3)
+
+# Y por último, comprobamos con el nombre del dominio 
+![image](https://github.com/user-attachments/assets/a9010663-ccda-4bc5-9226-990f1aaf4002)
+
+## **Conclusión**
+
+Este proyecto permite crear un sitio WordPress en una arquitectura de tres niveles utilizando AWS. Hemos a configurado diferentes componentes como el balanceador de carga, los servidores web, el servidor de base de datos y un sistema de archivos compartido con NFS. Aunque hubo algunos desafíos, como problemas con el montaje automático de NFS y la optimización del rendimiento, logramos resolverlos y entender mejor cómo funcionan estas tecnologías juntas.
+
+Al final, conseguimos que WordPress funcione de forma estable y con una estructura escalable. Este trabajo nos ayudó a practicar habilidades importantes como configurar servicios en la nube, solucionar problemas técnicos y optimizar sistemas para que sean más rápidos y confiables. Este proyecto es una buena base para seguir aprendiendo más sobre arquitectura de servidores y aplicaciones web.
+
