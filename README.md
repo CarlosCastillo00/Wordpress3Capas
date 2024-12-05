@@ -110,6 +110,46 @@ a2dissite 000-default.conf
 systemctl restart apache2
 systemctl reload apache2
 ```
+**apt update -y:** Actualiza la lista de paquetes disponibles automáticamente.
+
+
+**apt install -y apache2:** Instala Apache2 sin pedir confirmación.
+
+
+**a2enmod proxy:** Activa el módulo de proxy en Apache.
+
+
+**a2enmod proxy_http:** Activa el módulo para manejar proxys HTTP.
+
+
+**a2enmod proxy_balancer:** Activa el módulo para balanceo de carga.
+
+
+**a2enmod lbmethod_byrequests:** Activa el método de balanceo de carga basado en la cantidad de solicitudes.
+
+
+**cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/load-balancer.conf:** Duplica el archivo de configuración predeterminado y lo renombra.
+
+
+**sed -i '/DocumentRoot \/var\/www\/html/s/^/#/' ...:** Comenta la línea que define el directorio raíz en el nuevo archivo.
+
+
+**sed -i '/:warn/ a ...':** Inserta configuración del balanceador de carga después de la línea :warn.
+
+
+**a2ensite load-balancer.conf:** Activa el nuevo sitio configurado.
+
+
+**a2dissite 000-default.conf:** Desactiva el sitio predeterminado.
+
+
+**systemctl restart apache2:** Reinicia el servicio Apache para aplicar cambios.
+
+
+**systemctl reload apache2:** Recarga Apache para actualizar configuraciones sin reiniciar completamente.
+
+
+
 ### **NFS**
 ```bash
 apt update -y
@@ -129,6 +169,53 @@ chmod 755 -R /var/nfs/shared/
 chown -R www-data:www-data /var/nfs/shared/*
 systemctl restart nfs-kernel-server
 ```
+**apt update -y:** Actualiza la lista de paquetes disponibles.
+
+
+**apt install nfs-kernel-server -y:** Instala el servidor NFS para compartir archivos en red.
+
+
+**apt install unzip -y:** Instala la herramienta para descomprimir archivos ZIP.
+
+
+**apt install curl -y:** Instala la herramienta para transferencias HTTP/HTTPS.
+
+
+**apt install php php-mysql -y:** Instala PHP y el módulo para conectarse a bases de datos MySQL.
+
+
+**apt install mysql-client -y:** Instala el cliente para conectarse a bases de datos MySQL.
+
+
+**mkdir /var/nfs/shared -p:** Crea el directorio compartido NFS, incluyendo padres si no existen.
+
+
+**chown -R nobody:nogroup /var/nfs/shared:** Asigna permisos al directorio compartido al usuario/grupo "nobody".
+
+
+**sed -i '$a ...':** Agrega configuraciones al archivo /etc/exports para compartir /var/nfs/shared con las IPs especificadas.
+
+
+
+**curl -O https://wordpress.org/latest.zip:** Descarga la última versión de WordPress como archivo ZIP.
+
+
+
+**unzip -o latest.zip -d /var/nfs/shared/:** Descomprime WordPress en el directorio compartido NFS.
+
+
+
+**chmod 755 -R /var/nfs/shared/:** Establece permisos de lectura y ejecución para todos en el directorio compartido.
+
+
+
+**chown -R www-data:www-data /var/nfs/shared/:** Asigna propiedad de los archivos a "www-data" (usuario/grupo de Apache).
+
+
+**systemctl restart nfs-kernel-server:** Reinicia el servidor NFS para aplicar cambios.
+
+
+
 ### **WebServers**
 ```bash
 apt update -y
@@ -160,6 +247,57 @@ systemctl restart apache2
 systemctl reload apache2
 systemctl status apache2
 ```
+**apt update -y:** Actualiza la lista de paquetes de software disponibles.
+
+
+**apt install apache2 -y:** Instala el servidor web Apache.
+
+
+**apt install nfs-common -y:** Instala los componentes necesarios para clientes NFS.
+
+
+**apt install php ... -y:** Instala PHP y extensiones necesarias para sitios dinámicos como WordPress.
+
+
+**a2enmod rewrite:** Activa el módulo rewrite de Apache para habilitar URLs amigables.
+
+
+**sed -i 's|DocumentRoot .*|DocumentRoot /nfs/shared/wordpress|g' ...:** Cambia la raíz del sitio web a /nfs/shared/wordpress.
+
+
+**sed -i '/<\/VirtualHost>/i \ ...':** Agrega una configuración para permitir acceso completo al directorio de WordPress.
+
+
+**cp .../000-default.conf .../websv.conf:** Duplica la configuración predeterminada para crear un archivo para el nuevo sitio web.
+
+
+**mkdir -p /nfs/shared:** Crea el directorio donde se montará la carpeta NFS compartida.
+
+
+**mount 192.168.10.134:/var/nfs/shared /nfs/shared:** Monta el directorio compartido del servidor NFS.
+
+
+**a2dissite 000-default.conf:** Desactiva el sitio web predeterminado.
+
+
+**a2ensite websv.conf:** Activa el nuevo sitio web configurado.
+
+
+**echo ... | sudo tee -a /etc/fstab:** Agrega la configuración de montaje permanente para NFS en el archivo fstab.
+
+
+**mount -a:** Monta todas las particiones y configuraciones definidas en fstab.
+
+
+**systemctl restart apache2:** Reinicia Apache para aplicar cambios en módulos y configuraciones.
+
+
+**systemctl reload apache2:** Recarga la configuración de Apache sin reiniciar completamente.
+
+
+**systemctl status apache2:** Verifica el estado actual del servicio Apache.
+
+
 ### **SGBD**
 ```bash
 apt install mysql-server -y
@@ -176,6 +314,39 @@ GRANT ALL PRIVILEGES ON db_wordpress.* TO 'Carloscast'@'192.168.10.%';
 FLUSH PRIVILEGES;
 EOF
 ```
+**apt install mysql-server -y:** Instala el servidor MySQL.
+
+
+**apt update -y:** Actualiza la lista de paquetes disponibles.
+
+
+**apt install -y mysql-server:** Asegura que MySQL esté instalado (ya redundante).
+
+
+**sudo apt install -y phpmyadmin:** Instala phpMyAdmin, una interfaz web para administrar MySQL.
+
+
+**sed -i "s/^bind-address\s*=.*/bind-address = 192.168.10.153/" ...:** Cambia la dirección de enlace del servidor MySQL para que acepte conexiones en la IP 192.168.10.153.
+
+
+**sudo systemctl restart mysql:** Reinicia MySQL para aplicar los cambios de configuración.
+
+
+**mysql <<EOF ... EOF:** Ejecuta comandos MySQL:
+
+
+**CREATE DATABASE db_wordpress;:** Crea una base de datos llamada db_wordpress.
+
+
+**CREATE USER 'Carloscast'@'192.168.10.%' IDENTIFIED BY 'S1234?';:** Crea un usuario llamado Carloscast con acceso desde cualquier IP de la subred 192.168.10.* y clave S1234?.
+
+
+**GRANT ALL PRIVILEGES ON db_wordpress.** TO 'Carloscast'@'192.168.10.%';:** Otorga todos los permisos en la base de datos db_wordpress al usuario.
+
+
+**FLUSH PRIVILEGES;:* Aplica los cambios de privilegios inmediatamente.
+
+
 ### Una vez ejecutados todos los SH, nos vamos a la página wordpress con nuestra IP pública, para empezar a realizar la configuración de la base de datos:
 
 # Creación de una base de datos y usuario para WordPress:
