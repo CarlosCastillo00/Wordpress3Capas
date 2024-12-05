@@ -158,7 +158,6 @@ apt install unzip -y
 apt install curl -y
 apt install php php-mysql -y
 apt install mysql-client -y
-
 mkdir /var/nfs/shared -p
 chown -R nobody:nogroup /var/nfs/shared
 sed -i '$a /var/nfs/shared    192.168.10.135(rw,sync,no_subtree_check)' /etc/exports
@@ -223,7 +222,6 @@ apt install apache2 -y
 apt install nfs-common -y
 apt install php libapache2-mod-php php-mysql php-curl php-gd php-xml php-mbstring php-xmlrpc php-zip php-soap php -y
 a2enmod rewrite
-#servidores web
 sudo sed -i 's|DocumentRoot .*|DocumentRoot /nfs/shared/wordpress|g' /etc/apache2/sites-available/000-default.conf
 
 sed -i '/<\/VirtualHost>/i \
@@ -235,8 +233,6 @@ sed -i '/<\/VirtualHost>/i \
 
 
 cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/websv.conf
-# Montar la carpeta compartida desde el servidor NFS
-
 mkdir -p /nfs/shared
 mount 192.168.10.134:/var/nfs/shared /nfs/shared
 a2dissite 000-default.conf
@@ -297,6 +293,17 @@ systemctl status apache2
 
 **systemctl status apache2:** Verifica el estado actual del servicio Apache.
 
+## Para el montado automático de la carpeta, procederemos a introducir en ambos web server, en la ruta /etc/fstab la siguiente línea:
+
+```bash
+192.168.10.134:/var/nfs/shared    /nfs/shared   nfs auto,nofail,noatime,nolock,intr,tcp,actimeo=1800 0 0
+````
+
+Tras introducir esta línea, ejecutaremos:
+
+```bash
+Sudo mount -a
+````
 
 ### **SGBD**
 ```bash
